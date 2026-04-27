@@ -1,0 +1,427 @@
+no service pad
+no service nagle
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps debug datetime msec localtime
+service timestamps log datetime msec localtime show-timezone
+
+service password-encryption
+no service call-home
+
+hostname {{ device.name }}
+
+vrf definition Mgmt-vrf
+!
+ address-family ipv4
+ exit-address-family
+!
+ address-family ipv6
+ exit-address-family
+!
+
+logging snmp-authfail
+logging buffered 32000
+no logging console
+no logging monitor
+aaa new-model
+!
+password encryption aes
+!
+aaa group server tacacs+ TACACS-SRV
+{% for srv in golden_config.aaa.tacacs_servers %}
+ server name {{ srv.name }}
+{% endfor %}
+!
+{% for srv in golden_config.aaa.tacacs_servers %}
+tacacs server {{ srv.name }}
+ address ipv4 {{ srv.ip }}
+ key 6 {{ golden_config.secrets.tacacs_secret }}
+!
+{% endfor %}
+
+ip tacacs source-interface {{ source_interface.name }}
+
+!---------------------------------------------------------
+!REGIONAL RADIUS SERVER IPs
+!!EMEA: 10.30.37.6
+!!APAC: 10.30.168.249
+!!AMAS: 10.30.133.4
+
+radius server RADIUS
+ address ipv4 {{ golden_config.aaa.radius.server_ip }} auth-port 1812 acct-port 1813
+ timeout 5
+ retransmit 3
+ key 0 {{ golden_config.secrets.radius_key }}
+
+
+aaa group server radius RADIUS-SRV
+ server name RADIUS
+ ip radius source-interface {{ source_interface.name }}
+
+
+radius-server dead-criteria time 15 tries 3
+radius-server deadtime 5
+
+
+aaa server radius dynamic-author
+ client {{ golden_config.aaa.radius.server_ip }} server-key 0 {{ golden_config.secrets.radius_key }}
+
+!-------------------------------------------------------------------
+aaa authentication login default group TACACS-SRV local
+aaa authentication login console group TACACS-SRV local
+aaa authentication login ssh group TACACS-SRV local
+aaa authentication dot1x default group RADIUS-SRV
+aaa authorization config-commands
+aaa authorization exec commande group TACACS-SRV local
+aaa authorization commands 0 commande group TACACS-SRV local
+aaa authorization commands 1 commande group TACACS-SRV local
+aaa authorization commands 15 commande group TACACS-SRV local
+aaa authorization network default group RADIUS-SRV
+aaa accounting exec accounting start-stop group TACACS-SRV
+aaa accounting commands 0 accounting start-stop group TACACS-SRV
+aaa accounting commands 1 accounting start-stop group TACACS-SRV
+aaa accounting commands 15 accounting start-stop group TACACS-SRV
+!
+aaa session-id common
+!
+clock timezone {{ golden_config.standards.timezone_name }} {{ golden_config.standards.timezone_offset }}
+clock summer-time {{ golden_config.standards.timezone_name }} {{ golden_config.standards.summer_time_rule }}
+boot system switch all flash:packages.conf
+!
+ip name-server {{ golden_config.services.dns_servers | join(' ') }}
+ip domain name {{ golden_config.services.domain_name }}
+ip domain lookup source-interface {{ source_interface.name }}
+!
+ip dhcp snooping vlan {{ golden_config.security.dhcp_snooping_vlans | join(',') }}
+no ip dhcp snooping information option
+ip dhcp snooping database flash:dhcp_snooping.txt
+ip dhcp snooping database timeout 10
+ip dhcp snooping
+ip arp inspection vlan {{ golden_config.security.arp_inspection_vlans | join(',') }}
+ip arp inspection validate src-mac ip
+ip arp inspection log-buffer entries 100
+ip arp inspection log-buffer logs 20 interval 120
+login on-success log
+login block-for 300 attempts 3 within 60
+!
+udld aggressive
+!
+vtp version 3
+vtp mode off
+
+!
+dot1x system-auth-control
+dot1x critical eapol
+!
+archive
+ log config
+   logging enable
+   logging size 500
+   notify syslog
+   hidekeys
+!
+memory free low-watermark processor {{ golden_config.standards.memory_threshold_kb }}
+! show memory processor statistics - 10% of free memory in KB as <THRESHOLD_KB>
+!
+diagnostic bootup level minimal
+
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+spanning-tree vlan 1-4094 priority 61440
+spanning-tree portfast default
+spanning-tree portfast bpduguard default
+!
+!
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause psecure-violation
+errdisable recovery interval 300
+!
+username tlfadmin privilege 15 algorithm-type scrypt secret {{ golden_config.secrets.local_admin_secret }}
+enable algorithm-type scrypt secret {{ golden_config.secrets.enable_secret }}
+!
+redundancy
+ mode sso
+!
+transceiver type all
+ monitoring
+!
+
+{% for vlan in vlans %}
+vlan {{ vlan.id }}
+name {{ vlan.name }}
+!
+{% endfor %}
+
+! ---Unified Auth port supporting dot1x with Voice and MAB---
+{% for ifname in interfaces.authenticated_access %}
+interface {{ ifname }}
+ description {{ golden_config.port_profiles.authenticated_access.description }}
+ switchport mode access
+ switchport nonegotiate
+ authentication host-mode multi-domain
+ authentication port-control auto
+ authentication order dot1x mab
+ authentication priority dot1x mab
+ authentication periodic
+ authentication timer reauthenticate server
+ authentication timer inactivity server
+ authentication violation protect
+ authentication event fail action authorize vlan {{ golden_config.port_profiles.authenticated_access.guest_vlan.id }}
+ authentication event no-response action authorize vlan {{ golden_config.port_profiles.authenticated_access.guest_vlan.id }}
+ authentication event server dead action authorize vlan {{ golden_config.port_profiles.authenticated_access.dead_server_vlan.id }}
+ authentication event server dead action authorize voice
+ authentication event server alive action reinitialize
+ dot1x pae authenticator
+ dot1x timeout tx-period 5
+ dot1x timeout supp-timeout 10
+ dot1x max-reauth-req 2
+ mab
+ storm-control broadcast level 5.00
+ storm-control multicast level 5.00
+ storm-control action shutdown
+ ip dhcp snooping limit rate 100
+ ip arp inspection limit rate 100
+ no snmp trap link-status
+ no shutdown
+!
+{% endfor %}
+
+! ---VISIO PORT with Sticky MAC---
+{% for ifname in interfaces.visio_access %}
+interface {{ ifname }}
+ description {{ golden_config.port_profiles.visio_access.description }}
+ switchport mode access
+ switchport access vlan {{ golden_config.port_profiles.visio_access.access_vlan.id }}
+ switchport nonegotiate
+ spanning-tree guard root
+ switchport port-security
+ switchport port-security maximum 1
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ storm-control broadcast level 5.00
+ storm-control multicast level 5.00
+ storm-control unicast level 5.00
+ storm-control action trap
+ ip dhcp snooping limit rate 100
+ ip arp inspection limit rate 100
+ no snmp trap link-status
+!
+{% endfor %}
+
+! --- ACCESS POINT PORT ---
+{% for ifname in interfaces.ap_trunks %}
+interface {{ ifname }}
+ description {{ golden_config.port_profiles.ap_trunk.description }}
+ switchport mode trunk
+ switchport trunk native vlan {{ golden_config.port_profiles.ap_trunk.native_vlan.id }}
+ switchport trunk allowed vlan {{ golden_config.port_profiles.ap_trunk.allowed_vlans | join(',') }}
+ switchport nonegotiate
+ ip dhcp snooping trust
+ ip arp inspection trust
+ spanning-tree portfast trunk
+ spanning-tree guard root
+ storm-control broadcast level 5.00
+ storm-control multicast level 5.00
+!
+{% endfor %}
+
+! --- UPLINK PORT-CHANNEL INTERFACE ---
+interface Port-channel{{ golden_config.port_profiles.uplink.port_channel_id }}
+ description {{ golden_config.port_profiles.uplink.description }}
+ switchport mode trunk
+ switchport trunk native vlan {{ golden_config.port_profiles.uplink.native_vlan.id }}
+ switchport trunk allowed vlan {{ golden_config.port_profiles.uplink.allowed_vlans | join(',') }}
+ switchport nonegotiate
+ spanning-tree guard root
+ ip dhcp snooping trust
+ ip arp inspection trust
+!
+
+{% for ifname in interfaces.uplink_members %}
+interface {{ ifname }}
+ description {{ golden_config.port_profiles.uplink.description }}
+ switchport
+ switchport mode trunk
+ switchport trunk native vlan {{ golden_config.port_profiles.uplink.native_vlan.id }}
+ switchport trunk allowed vlan {{ golden_config.port_profiles.uplink.allowed_vlans | join(',') }}
+ switchport nonegotiate
+ ip dhcp snooping trust
+ ip arp inspection trust
+ channel-group {{ golden_config.port_profiles.uplink.port_channel_id }} mode active
+!
+{% endfor %}
+
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ description Out-of-Band Management
+ shutdown
+
+interface {{ oob.interface_name }}
+ description Out-of-Band Management
+ no switchport
+ ip address {{ oob.ip_address }} {{ oob.subnet_mask }}
+ no shutdown
+
+interface Vlan1
+ no ip address
+ shutdown
+
+interface {{ management.svi_name }}
+ description VLAN_de_Supervision
+ ip address {{ management.ip_address }} {{ management.subnet_mask }}
+!
+
+no ip forward-protocol nd
+no ip http server
+ip http secure-server ! Required for CSLU to On-Prem SSM
+ip http client source-interface {{ source_interface.name }}
+ip http secure-trustpoint SLA-TrustPoint
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+ip ssh source-interface {{ source_interface.name }}
+!
+ip route 0.0.0.0 0.0.0.0 {{ oob.gateway }}
+!
+logging facility daemon
+logging source-interface {{ source_interface.name }}
+{% for host in golden_config.services.syslog_servers %}
+logging host {{ host }}
+{% endfor %}
+
+!
+logging origin-id hostname
+!
+
+ip access-list standard 11
+{% for entry in golden_config.access_lists.vty_acl_11 %}
+ {{ entry.seq }} remark **{{ entry.remark }}**
+ {{ entry.seq }} permit {{ entry.network }} {{ entry.wildcard }}
+{% endfor %}
+
+!
+
+ip access-list standard 55
+{% for entry in golden_config.access_lists.snmp_acl_55 %}
+ {{ entry.seq }} remark **{{ entry.remark }}**
+ {{ entry.seq }} permit {{ entry.network }} {{ entry.wildcard }}
+{% endfor %}
+!
+
+
+! SNMP 2c
+{# Deferred to AAP. Keep placeholder comments until the secret workflow is implemented. #}
+! snmp-server community <RO_COMMUNITY_1> RO 55
+! snmp-server community <RW_COMMUNITY_1> RW 55
+! snmp-server community <RO_COMMUNITY_2> RO 55
+! snmp-server community <RW_COMMUNITY_2> RW 55
+
+! SNMP v3- Optional -Subject to readiness
+snmp-server view V3-READ-VIEW iso included
+snmp-server group G-READ v3 priv read V3-READ-VIEW access 55
+snmp-server user ttsnmpro G-READ v3 auth sha {{ golden_config.secrets.snmpv3_auth_password }} priv aes 128 {{ golden_config.secrets.snmpv3_priv_password }}
+{% for host in golden_config.snmp.trap_hosts_v3 %}
+snmp-server host {{ host }} version 3 priv ttsnmpro
+{% endfor %}
+
+snmp-server trap-source {{ source_interface.name }}
+snmp-server location {{ device.snmp_location }}
+snmp-server enable traps snmp authentication linkdown linkup coldstart warmstart
+snmp-server enable traps auth-framework sec-violation
+snmp-server enable traps memory bufferpeak
+snmp-server enable traps config-copy
+snmp-server enable traps config
+snmp-server enable traps config-ctid
+snmp-server enable traps entity
+snmp-server enable traps flash insertion removal lowspace
+snmp-server enable traps power-ethernet group 1 threshold 80
+snmp-server enable traps power-ethernet group 2 threshold 80
+snmp-server enable traps power-ethernet police
+snmp-server enable traps cpu threshold
+snmp-server enable traps udld link-fail-rpt
+snmp-server enable traps udld status-change
+snmp-server enable traps vlancreate
+snmp-server enable traps vlandelete
+snmp-server enable traps port-security
+snmp-server enable traps envmon
+snmp-server enable traps stackwise
+snmp-server enable traps dhcp
+snmp-server enable traps bridge newroot topologychange
+snmp-server enable traps stpx inconsistency root-inconsistency loop-inconsistency
+snmp-server enable traps mac-notification change move threshold
+snmp-server enable traps errdisable
+snmp-server enable traps vlan-membership
+snmp-server enable traps transceiver all
+snmp-server enable traps rf
+!
+!
+control-plane
+ service-policy input system-cpp-policy
+!
+!
+banner motd ^CCC
+{% for line in golden_config.standards.banner_motd_lines %}
+{{ line }}
+{% endfor %}
+^C
+!
+line con 0
+ logging synchronous
+ login authentication console
+ exec-timeout 10 0
+ stopbits 1
+
+
+line vty 0 15
+ access-class 11 in
+ exec-timeout 10 0
+ authorization commands 0 commande
+ authorization commands 1 commande
+ authorization commands 15 commande
+ authorization exec commande
+ accounting commands 0 accounting
+ accounting commands 1 accounting
+ accounting commands 15 accounting
+ logging synchronous
+ login authentication ssh
+ transport input ssh
+
+line vty 16 31
+ access-class 11 in
+ exec-timeout 10 0
+ authorization commands 0 commande
+ authorization commands 1 commande
+ authorization commands 15 commande
+ authorization exec commande
+ accounting commands 0 accounting
+ accounting commands 1 accounting
+ accounting commands 15 accounting
+ logging synchronous
+ login authentication ssh
+ transport input ssh
+!
+
+no service call-home
+license smart transport cslu
+ license smart url cslu https://10.23.66.7/cslu/v1/pi
+! Run 'license smart register idtoken {{ golden_config.secrets.smart_license_idtoken }}' in EXEC mode to register the switch
+
+!
+{% set ntp_lines = [] %}
+{% for ntp in golden_config.services.ntp_servers %}
+{% set _ = ntp_lines.append('ntp server ' ~ ntp.ip ~ (' prefer' if ntp.prefer else '')) %}
+{% endfor %}
+{{ ntp_lines | join('\n') }}
+ntp source {{ source_interface.name }}
+!
+!
+! DNAC onboarding and Operations
+netconf-yang
+netconf-yang feature candidate-datastore
+yang-interfaces aaa authentication method-list ssh
+yang-interfaces aaa authorization method-list commande
+!
+!
+
+end

@@ -1,0 +1,62 @@
+---
+netbox_api_url: "{{ lookup('env', 'NETBOX_API_URL') | default('', true) }}"
+netbox_api_token: "{{ lookup('env', 'NETBOX_API_TOKEN') | default('', true) }}"
+golden_config_target_device: ""
+
+golden_config_template_path: ""
+golden_config_render_output_dir: ""
+golden_config_render_context_output_dir: ""
+golden_config_write_render_context: true
+golden_config_require_runtime_secrets: true
+
+golden_config_runtime_secret_env_map:
+  master_key: GOLDEN_CONFIG_MASTER_KEY
+  tacacs_secret: GOLDEN_CONFIG_TACACS_SECRET
+  radius_key: GOLDEN_CONFIG_RADIUS_KEY
+  local_admin_secret: GOLDEN_CONFIG_LOCAL_ADMIN_SECRET
+  enable_secret: GOLDEN_CONFIG_ENABLE_SECRET
+  snmpv3_auth_password: GOLDEN_CONFIG_SNMPV3_AUTH_PASSWORD
+  snmpv3_priv_password: GOLDEN_CONFIG_SNMPV3_PRIV_PASSWORD
+  smart_license_idtoken: GOLDEN_CONFIG_SMART_LICENSE_IDTOKEN
+
+golden_config_prefix_to_netmask_map:
+  8: 255.0.0.0
+  16: 255.255.0.0
+  17: 255.255.128.0
+  18: 255.255.192.0
+  19: 255.255.224.0
+  20: 255.255.240.0
+  21: 255.255.248.0
+  22: 255.255.252.0
+  23: 255.255.254.0
+  24: 255.255.255.0
+  25: 255.255.255.128
+  26: 255.255.255.192
+  27: 255.255.255.224
+  28: 255.255.255.240
+  29: 255.255.255.248
+  30: 255.255.255.252
+
+golden_config_prefix_to_wildcard_map:
+  8: 0.255.255.255
+  16: 0.0.255.255
+  17: 0.0.127.255
+  18: 0.0.63.255
+  19: 0.0.31.255
+  20: 0.0.15.255
+  21: 0.0.7.255
+  22: 0.0.3.255
+  23: 0.0.1.255
+  24: 0.0.0.255
+  25: 0.0.0.127
+  26: 0.0.0.63
+  27: 0.0.0.31
+  28: 0.0.0.15
+  29: 0.0.0.7
+  30: 0.0.0.3
+
+golden_config_additional_staging_vty_acl_entries:
+  - seq: 6
+    remark: Additional Staging
+    network: 192.168.100.0
+    wildcard: 0.0.0.255

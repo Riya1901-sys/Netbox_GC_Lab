@@ -1,0 +1,147 @@
+---
+- name: Validate deployment role inputs
+  ansible.builtin.assert:
+    that:
+      - golden_config_target_device | length > 0
+      - golden_config_render_output_dir | length > 0
+      - golden_config_render_context_output_dir | length > 0
+      - golden_config_backup_output_dir | length > 0
+    fail_msg: >-
+      golden_config_target_device, golden_config_render_output_dir,
+      golden_config_render_context_output_dir, and
+      golden_config_backup_output_dir must be defined before deployment.
+
+- name: Build rendered config path for the target device
+  ansible.builtin.set_fact:
+    golden_config_rendered_config_path: "{{ golden_config_render_output_dir }}/{{ golden_config_target_device }}.cfg"
+
+- name: Build render context path for the target device
+  ansible.builtin.set_fact:
+    golden_config_render_context_path: "{{ golden_config_render_context_output_dir }}/{{ golden_config_target_device }}.json"
+
+- name: Check rendered config exists on the controller
+  ansible.builtin.stat:
+    path: "{{ golden_config_rendered_config_path }}"
+  delegate_to: localhost
+  register: golden_config_rendered_config_stat
+
+- name: Check render context exists on the controller
+  ansible.builtin.stat:
+    path: "{{ golden_config_render_context_path }}"
+  delegate_to: localhost
+  register: golden_config_render_context_stat
+
+- name: Validate rendered config presence
+  ansible.builtin.assert:
+    that:
+      - golden_config_rendered_config_stat.stat.exists
+      - golden_config_render_context_stat.stat.exists
+    fail_msg: >-
+      Rendered config {{ golden_config_rendered_config_path }} and render
+      context {{ golden_config_render_context_path }} must exist on the
+      controller. Run the render workflow successfully before deployment.
+
+- name: Load render context from the controller
+  ansible.builtin.slurp:
+    src: "{{ golden_config_render_context_path }}"
+  delegate_to: localhost
+  register: golden_config_render_context_slurped
+
+- name: Cache rendered management context for deployment pre-checks
+  ansible.builtin.set_fact:
+    golden_config_render_context: "{{ golden_config_render_context_slurped.content | b64decode | from_json }}"
+    golden_config_oob_interface_name: "{{ (golden_config_render_context_slurped.content | b64decode | from_json).oob.interface_name }}"
+    golden_config_oob_gateway: "{{ (golden_config_render_context_slurped.content | b64decode | from_json).oob.gateway }}"
+
+- name: Validate rendered OOB context for staging-safe deployment
+  ansible.builtin.assert:
+    that:
+      - golden_config_oob_interface_name | length > 0
+      - golden_config_oob_gateway | length > 0
+    fail_msg: >-
+      OOB interface and gateway must be present in the rendered context before
+      deployment.
+
+- name: Ensure pre-change backup directory exists on the controller
+  ansible.builtin.file:
+    path: "{{ golden_config_backup_output_dir }}"
+    state: directory
+  delegate_to: localhost
+
+- name: Confirm network CLI connectivity to the target switch
+  cisco.ios.ios_command:
+    commands:
+      - show version
+  register: golden_config_connectivity_check
+
+- name: Check OOB interface operational state before deployment
+  cisco.ios.ios_command:
+    commands:
+      - "show ip interface brief | include ^{{ golden_config_oob_interface_name }} "
+  register: golden_config_oob_interface_check
+
+- name: Validate OOB interface is up before deployment
+  ansible.builtin.assert:
+    that:
+      - golden_config_oob_interface_check.stdout[0] is search('up\\s+up')
+    fail_msg: >-
+      OOB interface {{ golden_config_oob_interface_name }} is not up/up.
+      Refusing deployment to avoid lockout.
+
+- name: Check OOB gateway reachability before deployment
+  cisco.ios.ios_command:
+    commands:
+      - "ping {{ golden_config_oob_gateway }} source {{ golden_config_oob_interface_name }} repeat 2 timeout 1"
+  register: golden_config_oob_gateway_ping
+
+- name: Validate OOB gateway reachability before deployment
+  ansible.builtin.assert:
+    that:
+      - golden_config_oob_gateway_ping.stdout[0] is search('Success rate is [1-9][0-9]* percent')
+    fail_msg: >-
+      OOB gateway {{ golden_config_oob_gateway }} is not reachable from
+      {{ golden_config_oob_interface_name }}. Refusing deployment to avoid
+      lockout.
+
+- name: Capture running configuration before deployment
+  cisco.ios.ios_command:
+    commands:
+      - show running-config
+  register: golden_config_running_config_before
+
+- name: Persist pre-change running config backup to the controller
+  ansible.builtin.copy:
+    dest: "{{ golden_config_backup_output_dir }}/{{ inventory_hostname }}-before.cfg"
+    content: "{{ golden_config_running_config_before.stdout[0] }}"
+    mode: "0644"
+  delegate_to: localhost
+
+- name: Push rendered golden configuration to the target switch
+  cisco.ios.ios_config:
+    src: "{{ golden_config_rendered_config_path }}"
+    save_when: never
+    match: none
+  register: golden_config_push_result
+
+- name: Save running configuration after deployment
+  cisco.ios.ios_config:
+    save_when: always
+  when: golden_config_deploy_force_save | bool
+
+- name: Run post-deployment validation commands
+  cisco.ios.ios_command:
+    commands: "{{ golden_config_postcheck_commands }}"
+  register: golden_config_postcheck_output
+  when: golden_config_postcheck_commands | length > 0
+
+- name: Persist post-deployment command output to the controller
+  ansible.builtin.copy:
+    dest: "{{ golden_config_backup_output_dir }}/{{ inventory_hostname }}-postcheck.txt"
+    content: |
+      {% for command_output in golden_config_postcheck_output.stdout | default([]) %}
+      {{ command_output }}
+
+      {% endfor %}
+    mode: "0644"
+  delegate_to: localhost
+  when: golden_config_postcheck_commands | length > 0

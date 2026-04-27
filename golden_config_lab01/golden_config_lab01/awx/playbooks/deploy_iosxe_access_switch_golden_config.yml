@@ -1,0 +1,39 @@
+---
+- name: Render IOS-XE access-switch golden configuration
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    golden_config_template_path: "{{ playbook_dir }}/../../templates/iosxe_access_switch_golden_config.j2"
+    golden_config_render_output_dir: "{{ playbook_dir }}/../artifacts/rendered-configs"
+    golden_config_render_context_output_dir: "{{ playbook_dir }}/../artifacts/render-contexts"
+    golden_config_write_render_context: true
+
+  roles:
+    - role: netbox_golden_config_render
+
+- name: Deploy IOS-XE access-switch golden configuration
+  hosts: iosxe_access_switches
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  collections:
+    - cisco.ios
+    - ansible.netcommon
+
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.env', 'GOLDEN_CONFIG_SWITCH_USERNAME') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'GOLDEN_CONFIG_SWITCH_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'GOLDEN_CONFIG_SWITCH_ENABLE_PASSWORD') }}"
+    ansible_network_cli_ssh_type: paramiko
+    ansible_host_key_auto_add: true
+    golden_config_render_output_dir: "{{ playbook_dir }}/../artifacts/rendered-configs"
+    golden_config_render_context_output_dir: "{{ playbook_dir }}/../artifacts/render-contexts"
+    golden_config_backup_output_dir: "{{ playbook_dir }}/../artifacts/prechange-backups"
+    golden_config_postcheck_commands:
+      - show ip interface brief
+      - show running-config | include ^hostname|^ip route 0.0.0.0|^ip default-gateway
+      - show running-config interface GigabitEthernet1/0/1
+      - show running-config interface Vlan2
+
+  roles:
+    - role: iosxe_golden_config_deploy

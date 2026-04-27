@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: OpenAI Codex
+  description: Deploys a rendered IOS-XE golden config to a Cisco access switch.
+  license: MIT
+  min_ansible_version: "2.15"
+
+dependencies: []

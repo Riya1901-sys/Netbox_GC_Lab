@@ -1,0 +1,6 @@
+---
+golden_config_render_output_dir: ""
+golden_config_render_context_output_dir: ""
+golden_config_backup_output_dir: ""
+golden_config_deploy_force_save: true
+golden_config_postcheck_commands: []

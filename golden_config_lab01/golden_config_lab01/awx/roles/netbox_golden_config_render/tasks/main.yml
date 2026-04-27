@@ -1,0 +1,540 @@
+---
+- name: Validate required input variables for golden config rendering
+  ansible.builtin.assert:
+    that:
+      - netbox_api_url | length > 0
+      - netbox_api_token | length > 0
+      - golden_config_target_device | length > 0
+      - golden_config_template_path | length > 0
+      - golden_config_render_output_dir | length > 0
+      - golden_config_render_context_output_dir | length > 0
+    fail_msg: >-
+      netbox_api_url, netbox_api_token, golden_config_target_device,
+      golden_config_template_path, golden_config_render_output_dir, and
+      golden_config_render_context_output_dir must be defined before running this job.
+
+- name: Build NetBox API request headers
+  ansible.builtin.set_fact:
+    golden_config_netbox_headers:
+      Authorization: "Token {{ netbox_api_token }}"
+      Accept: "application/json"
+      Content-Type: "application/json"
+  no_log: true
+
+- name: Query NetBox for the target device record
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/dcim/devices/?name={{ golden_config_target_device | urlencode }}"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_device_query
+  no_log: true
+
+- name: Validate target device lookup result
+  ansible.builtin.assert:
+    that:
+      - golden_config_device_query.json.count == 1
+    fail_msg: >-
+      Expected exactly one NetBox device named {{ golden_config_target_device }},
+      but received {{ golden_config_device_query.json.count }} results.
+
+- name: Cache target device record
+  ansible.builtin.set_fact:
+    golden_config_device_record: "{{ golden_config_device_query.json.results[0] }}"
+  no_log: true
+
+- name: Query NetBox for interfaces on the target device
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_device_record.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_interfaces_query
+  no_log: true
+
+- name: Query NetBox for site VLANs
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ golden_config_device_record.site.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_vlans_query
+  no_log: true
+
+- name: Query NetBox for the device primary IPv4 record
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ golden_config_device_record.primary_ip4.id }}/"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_primary_ip_query
+  no_log: true
+
+- name: Query NetBox for all IPv4 addresses on the target device
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ golden_config_device_record.id }}&family=4&limit=100"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_device_ips_query
+  no_log: true
+
+- name: Query NetBox for the tagged in-band management prefix on the device site
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=management-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_management_prefix_query
+  no_log: true
+
+- name: Query NetBox for the tagged OOB prefix on the device site
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=oob-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_oob_prefix_query
+  no_log: true
+
+- name: Cache NetBox collections required for render-context assembly
+  ansible.builtin.set_fact:
+    golden_config_interfaces_all: "{{ golden_config_interfaces_query.json.results }}"
+    golden_config_vlans_all: "{{ golden_config_vlans_query.json.results }}"
+    golden_config_primary_ip_record: "{{ golden_config_primary_ip_query.json }}"
+    golden_config_device_ip_records: "{{ golden_config_device_ips_query.json.results }}"
+    golden_config_management_prefix_record: "{{ golden_config_management_prefix_query.json.results[0] }}"
+    golden_config_oob_prefix_record: "{{ golden_config_oob_prefix_query.json.results[0] }}"
+    golden_config_context: "{{ golden_config_device_record.config_context.golden_config }}"
+  no_log: true
+
+- name: Read runtime secrets from AWX-injected environment variables
+  ansible.builtin.set_fact:
+    golden_config_runtime_secrets_raw:
+      master_key: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.master_key) | default('', true) }}"
+      tacacs_secret: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.tacacs_secret) | default('', true) }}"
+      radius_key: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.radius_key) | default('', true) }}"
+      local_admin_secret: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.local_admin_secret) | default('', true) }}"
+      enable_secret: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.enable_secret) | default('', true) }}"
+      snmpv3_auth_password: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.snmpv3_auth_password) | default('', true) }}"
+      snmpv3_priv_password: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.snmpv3_priv_password) | default('', true) }}"
+      smart_license_idtoken: "{{ lookup('ansible.builtin.env', golden_config_runtime_secret_env_map.smart_license_idtoken) | default('', true) }}"
+  no_log: true
+
+- name: Filter empty runtime secret values
+  ansible.builtin.set_fact:
+    golden_config_runtime_secrets: >-
+      {{
+        golden_config_runtime_secrets_raw
+        | dict2items
+        | rejectattr('value', 'equalto', '')
+        | list
+        | items2dict
+      }}
+  no_log: true
+
+- name: Merge NetBox context secrets with runtime secret overrides
+  ansible.builtin.set_fact:
+    golden_config_effective_secrets: "{{ golden_config_context.secrets | combine(golden_config_runtime_secrets, recursive=True) }}"
+  no_log: true
+
+- name: Validate that deployment secrets are resolved
+  ansible.builtin.assert:
+    that:
+      - golden_config_effective_secrets[item] is defined
+      - golden_config_effective_secrets[item] | string | length > 0
+      - golden_config_effective_secrets[item] != '__FROM_AAP__'
+    fail_msg: >-
+      Runtime secret {{ item }} is not populated. Attach an AWX credential that injects
+      {{ golden_config_runtime_secret_env_map[item] }} before using this rendered config
+      for deployment.
+  loop: "{{ golden_config_runtime_secret_env_map.keys() | list }}"
+  when: golden_config_require_runtime_secrets | bool
+  no_log: true
+
+- name: Validate management prefix lookup result
+  ansible.builtin.assert:
+    that:
+      - golden_config_management_prefix_query.json.count == 1
+      - golden_config_management_prefix_query.json.results[0].custom_fields.default_gateway is defined
+      - golden_config_management_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
+    fail_msg: >-
+      Expected exactly one management prefix tagged management-subnet for site
+      {{ golden_config_device_record.site.name }} and that prefix must have the
+      default_gateway custom field populated.
+
+- name: Validate OOB prefix lookup result
+  ansible.builtin.assert:
+    that:
+      - golden_config_oob_prefix_query.json.count == 1
+      - golden_config_oob_prefix_query.json.results[0].custom_fields.default_gateway is defined
+      - golden_config_oob_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
+    fail_msg: >-
+      Expected exactly one OOB prefix tagged oob-subnet for site
+      {{ golden_config_device_record.site.name }} and that prefix must have the
+      default_gateway custom field populated.
+
+- name: Build VLAN role lookup from native NetBox VLAN objects
+  ansible.builtin.set_fact:
+    golden_config_vlan_role_map: >-
+      {{
+        golden_config_vlan_role_map | default({}) |
+        combine({
+          item.custom_fields.golden_vlan_role: {
+            'id': item.vid,
+            'name': item.name
+          }
+        })
+      }}
+  loop: "{{ golden_config_vlans_all }}"
+  when:
+    - item.custom_fields is defined
+    - item.custom_fields.golden_vlan_role is defined
+    - item.custom_fields.golden_vlan_role | default('') | length > 0
+
+- name: Build interface profile groups from native NetBox interfaces
+  ansible.builtin.set_fact:
+    golden_config_interfaces_resolved:
+      authenticated_access: >-
+        {{
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'authenticated_access')
+          | map(attribute='name')
+          | list
+        }}
+      visio_access: >-
+        {{
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'visio_access')
+          | map(attribute='name')
+          | list
+        }}
+      ap_trunks: >-
+        {{
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'ap_trunk')
+          | map(attribute='name')
+          | list
+        }}
+      uplink_members: >-
+        {{
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'uplink_member')
+          | map(attribute='name')
+          | list
+        }}
+
+- name: Initialize normalized VLAN list for the Jinja template
+  ansible.builtin.set_fact:
+    golden_config_vlans_normalized: []
+
+- name: Normalize native NetBox VLAN objects for template rendering
+  ansible.builtin.set_fact:
+    golden_config_vlans_normalized: "{{ golden_config_vlans_normalized + [ { 'id': item.vid, 'name': item.name } ] }}"
+  loop: "{{ golden_config_vlans_all }}"
+
+- name: Build uplink interface range string for port-channel members
+  ansible.builtin.set_fact:
+    golden_config_uplink_members_range: >-
+      {{
+        (
+          (golden_config_interfaces_resolved.uplink_members | sort | first)
+          ~ ' - '
+          ~ (
+            (golden_config_interfaces_resolved.uplink_members | sort | last)
+            | regex_replace('^.*/', '')
+          )
+        )
+        if (
+          (golden_config_interfaces_resolved.uplink_members | length) > 1
+          and (
+            ((golden_config_interfaces_resolved.uplink_members | sort | first) | regex_replace('[0-9]+$', ''))
+            ==
+            ((golden_config_interfaces_resolved.uplink_members | sort | last) | regex_replace('[0-9]+$', ''))
+          )
+        )
+        else ((golden_config_interfaces_resolved.uplink_members | sort) | join(','))
+      }}
+
+- name: Identify the in-band management SVI interface
+  ansible.builtin.set_fact:
+    golden_config_management_interface: >-
+      {{
+        (
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'management_svi')
+          | list
+          | first
+        )
+      }}
+
+- name: Identify the OOB management interface
+  ansible.builtin.set_fact:
+    golden_config_oob_interface: >-
+      {{
+        (
+          golden_config_interfaces_all
+          | selectattr('custom_fields.golden_port_profile', 'equalto', 'oob_management')
+          | list
+          | first
+        )
+      }}
+
+- name: Identify the in-band management IPv4 record
+  ansible.builtin.set_fact:
+    golden_config_management_ip_record: >-
+      {{
+        (
+          golden_config_device_ip_records
+          | selectattr('assigned_object_id', 'equalto', golden_config_management_interface.id)
+          | list
+          | first
+        )
+      }}
+  no_log: true
+
+- name: Identify the OOB management IPv4 record
+  ansible.builtin.set_fact:
+    golden_config_oob_ip_record: >-
+      {{
+        (
+          golden_config_device_ip_records
+          | selectattr('assigned_object_id', 'equalto', golden_config_oob_interface.id)
+          | list
+          | first
+        )
+      }}
+  no_log: true
+
+- name: Validate management interface and IP lookups
+  ansible.builtin.assert:
+    that:
+      - golden_config_management_interface is defined
+      - golden_config_management_interface.name | length > 0
+      - golden_config_oob_interface is defined
+      - golden_config_oob_interface.name | length > 0
+      - golden_config_management_ip_record is defined
+      - golden_config_oob_ip_record is defined
+    fail_msg: >-
+      NetBox must define both management_svi and oob_management interfaces, and
+      each must have an assigned IPv4 address.
+
+- name: Derive in-band management addressing details
+  ansible.builtin.set_fact:
+    golden_config_management_ip_address: "{{ golden_config_management_ip_record.address.split('/')[0] }}"
+    golden_config_management_prefix_length: "{{ (golden_config_management_prefix_record.prefix.split('/')[1]) | int }}"
+    golden_config_management_subnet_mask: "{{ golden_config_prefix_to_netmask_map[(golden_config_management_prefix_record.prefix.split('/')[1]) | int] }}"
+    golden_config_management_gateway: >-
+      {{
+        golden_config_device_record.custom_fields.management_gateway_override
+        | default(golden_config_management_prefix_record.custom_fields.default_gateway, true)
+      }}
+
+- name: Derive OOB management addressing details
+  ansible.builtin.set_fact:
+    golden_config_oob_ip_address: "{{ golden_config_oob_ip_record.address.split('/')[0] }}"
+    golden_config_oob_prefix_length: "{{ (golden_config_oob_prefix_record.prefix.split('/')[1]) | int }}"
+    golden_config_oob_subnet_mask: "{{ golden_config_prefix_to_netmask_map[(golden_config_oob_prefix_record.prefix.split('/')[1]) | int] }}"
+    golden_config_oob_gateway: "{{ golden_config_oob_prefix_record.custom_fields.default_gateway }}"
+    golden_config_oob_network: "{{ golden_config_oob_prefix_record.prefix.split('/')[0] }}"
+    golden_config_oob_wildcard: "{{ golden_config_prefix_to_wildcard_map[(golden_config_oob_prefix_record.prefix.split('/')[1]) | int] }}"
+
+- name: Validate support for the management prefix length
+  ansible.builtin.assert:
+    that:
+      - golden_config_prefix_to_netmask_map[(golden_config_management_prefix_record.prefix.split('/')[1]) | int] is defined
+      - golden_config_prefix_to_wildcard_map[(golden_config_oob_prefix_record.prefix.split('/')[1]) | int] is defined
+    fail_msg: >-
+      Prefix length {{ golden_config_management_prefix_record.prefix.split('/')[1] }}
+      or OOB prefix length {{ golden_config_oob_prefix_record.prefix.split('/')[1] }}
+      is not present in the render lookup maps.
+
+- name: Build staging-safe VTY ACL entries
+  ansible.builtin.set_fact:
+    golden_config_vty_acl_entries_base: >-
+      {{
+        (
+          golden_config_context.access_lists.vty_acl_11
+          if (
+            golden_config_context.access_lists.vty_acl_11
+            | selectattr('network', 'equalto', golden_config_oob_network)
+            | list
+            | length
+          ) > 0
+          else
+          (
+            [ {
+              'seq': 5,
+              'remark': 'Staging OOB',
+              'network': golden_config_oob_network,
+              'wildcard': golden_config_oob_wildcard
+            } ] + golden_config_context.access_lists.vty_acl_11
+          )
+        )
+      }}
+
+- name: Append additional staging VTY ACL entries when absent
+  ansible.builtin.set_fact:
+    golden_config_vty_acl_entries: >-
+      {{
+        golden_config_vty_acl_entries_base +
+        (
+          golden_config_additional_staging_vty_acl_entries
+          | rejectattr(
+              'network',
+              'in',
+              (
+                golden_config_vty_acl_entries_base
+                | map(attribute='network')
+                | list
+              )
+            )
+          | list
+        )
+      }}
+
+- name: Build resolved golden config policy values from logical VLAN roles
+  ansible.builtin.set_fact:
+    golden_config_resolved_policy: >-
+      {{
+        {
+          'security': {
+            'dhcp_snooping_vlans': (
+              golden_config_context.security.dhcp_snooping_vlan_roles
+              | map('extract', golden_config_vlan_role_map)
+              | map(attribute='id')
+              | list
+            ),
+            'arp_inspection_vlans': (
+              golden_config_context.security.arp_inspection_vlan_roles
+              | map('extract', golden_config_vlan_role_map)
+              | map(attribute='id')
+              | list
+            )
+          },
+          'port_profiles': {
+            'authenticated_access': {
+              'description': golden_config_context.port_profiles.authenticated_access.description,
+              'guest_vlan': golden_config_vlan_role_map[golden_config_context.port_profiles.authenticated_access.guest_vlan_role],
+              'dead_server_vlan': golden_config_vlan_role_map[golden_config_context.port_profiles.authenticated_access.dead_server_vlan_role]
+            },
+            'visio_access': {
+              'description': golden_config_context.port_profiles.visio_access.description,
+              'access_vlan': golden_config_vlan_role_map[golden_config_context.port_profiles.visio_access.access_vlan_role]
+            },
+            'ap_trunk': {
+              'description': golden_config_context.port_profiles.ap_trunk.description,
+              'native_vlan': golden_config_vlan_role_map[golden_config_context.port_profiles.ap_trunk.native_vlan_role],
+              'allowed_vlans': (
+                golden_config_context.port_profiles.ap_trunk.allowed_vlan_roles
+                | map('extract', golden_config_vlan_role_map)
+                | map(attribute='id')
+                | list
+              )
+            },
+            'uplink': {
+              'description': golden_config_context.port_profiles.uplink.description,
+              'port_channel_id': golden_config_context.port_profiles.uplink.port_channel_id,
+              'native_vlan': golden_config_vlan_role_map[golden_config_context.port_profiles.uplink.native_vlan_role],
+              'allowed_vlans': (
+                golden_config_context.port_profiles.uplink.allowed_vlan_roles
+                | map('extract', golden_config_vlan_role_map)
+                | map(attribute='id')
+                | list
+              )
+            }
+          }
+        }
+      }}
+
+- name: Assemble final render payload for the Jinja template
+  ansible.builtin.set_fact:
+    golden_config_render_payload: >-
+      {{
+        {
+          'device': {
+            'name': golden_config_device_record.name,
+            'role': golden_config_device_record.role.slug,
+            'platform': golden_config_device_record.platform.slug,
+            'site': golden_config_device_record.site.name,
+            'location': golden_config_device_record.location.name,
+            'snmp_location': (
+              golden_config_device_record.custom_fields.snmp_location_override
+              | default(
+                  golden_config_device_record.site.name ~ ' - ' ~ golden_config_device_record.location.name,
+                  true
+                )
+            )
+          },
+          'management': {
+            'svi_name': golden_config_management_interface.name,
+            'ip_address': golden_config_management_ip_address,
+            'prefix_length': golden_config_management_prefix_length,
+            'subnet_mask': golden_config_management_subnet_mask,
+            'gateway': golden_config_management_gateway
+          },
+          'oob': {
+            'interface_name': golden_config_oob_interface.name,
+            'ip_address': golden_config_oob_ip_address,
+            'prefix_length': golden_config_oob_prefix_length,
+            'subnet_mask': golden_config_oob_subnet_mask,
+            'gateway': golden_config_oob_gateway
+          },
+          'source_interface': {
+            'name': golden_config_oob_interface.name
+          },
+          'vlans': golden_config_vlans_normalized,
+          'interfaces': {
+            'authenticated_access': golden_config_interfaces_resolved.authenticated_access,
+            'visio_access': golden_config_interfaces_resolved.visio_access,
+            'ap_trunks': golden_config_interfaces_resolved.ap_trunks,
+            'uplink_members': golden_config_interfaces_resolved.uplink_members,
+            'uplink_members_range': (golden_config_uplink_members_range | trim)
+          },
+          'golden_config': {
+            'services': golden_config_context.services,
+            'aaa': golden_config_context.aaa,
+            'standards': golden_config_context.standards,
+            'access_lists': (
+              golden_config_context.access_lists
+              | combine(
+                  { 'vty_acl_11': golden_config_vty_acl_entries },
+                  recursive=True
+                )
+            ),
+            'snmp': golden_config_context.snmp,
+            'secrets': golden_config_effective_secrets,
+            'security': golden_config_resolved_policy.security,
+            'port_profiles': golden_config_resolved_policy.port_profiles
+          }
+        }
+      }}
+
+- name: Ensure AWX artifact directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ golden_config_render_output_dir }}"
+    - "{{ golden_config_render_context_output_dir }}"
+
+- name: Persist render payload for troubleshooting and validation
+  ansible.builtin.copy:
+    dest: "{{ golden_config_render_context_output_dir }}/{{ golden_config_device_record.name }}.json"
+    content: "{{ golden_config_render_payload | to_nice_json }}"
+    mode: "0644"
+  when: golden_config_write_render_context | bool
+
+- name: Render IOS-XE golden configuration from the resolved payload
+  ansible.builtin.template:
+    src: "{{ golden_config_template_path }}"
+    dest: "{{ golden_config_render_output_dir }}/{{ golden_config_device_record.name }}.cfg"
+    mode: "0644"
+  vars:
+    device: "{{ golden_config_render_payload.device }}"
+    management: "{{ golden_config_render_payload.management }}"
+    oob: "{{ golden_config_render_payload.oob }}"
+    source_interface: "{{ golden_config_render_payload.source_interface }}"
+    vlans: "{{ golden_config_render_payload.vlans }}"
+    interfaces: "{{ golden_config_render_payload.interfaces }}"
+    golden_config: "{{ golden_config_render_payload.golden_config }}"
