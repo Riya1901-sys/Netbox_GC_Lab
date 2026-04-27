@@ -1,0 +1,8 @@
+- include_role:
+  name: render/NETBOX_FETCH
+  
+- include_role:
+  name: render/BUILD_CONTEXT
+
+- include_role:
+  name: render/RENDER_TEMPLATE

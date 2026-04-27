@@ -1,0 +1,11 @@
+- include_role:
+    name: deploy/PRE_CHECKS
+
+- include_role:
+    name: deploy/BACKUP
+
+- include_role:
+    name: deploy/PUSH_CONFIG
+
+- include_role:
+    name: deploy/POST_CHECKS
