@@ -4,7 +4,7 @@
   gather_facts: false
 
   roles:
-    - role: netbox_golden_config_render
+    - role: render
 
 - name: Deploy IOS-XE access-switch golden configuration
   hosts: iosxe_access_switches
@@ -15,4 +15,4 @@
     - ansible.netcommon
 
   roles:
-    - role: iosxe_golden_config_deploy
+    - role: deploy
