@@ -86,4 +86,8 @@
     
     #deployment roles variables
     golden_config_deploy_force_save: true
-    golden_config_postcheck_commands: []
+    golden_config_postcheck_commands:
+      - "show running-config"
+      - "show version"
+      - "show vlan brief"
+    
