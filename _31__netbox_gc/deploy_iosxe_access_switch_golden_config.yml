@@ -2,6 +2,9 @@
 - name: Render IOS-XE access-switch golden configuration
   hosts: localhost
   gather_facts: false
+  
+  vars_files:
+  - ../vars/golden_config.yml
 
   roles:
     - role: render
@@ -13,6 +16,9 @@
   collections:
     - cisco.ios
     - ansible.netcommon
+  
+  vars_files:
+  - ../vars/golden_config.yml
 
   roles:
     - role: deploy
