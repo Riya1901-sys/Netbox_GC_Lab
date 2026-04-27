@@ -1,8 +1,8 @@
 - include_role:
-  name: render/NETBOX_FETCH
+  name: render/netbox_fetch
   
 - include_role:
-  name: render/BUILD_CONTEXT
+  name: render/build_context
 
 - include_role:
-  name: render/RENDER_TEMPLATE
+  name: render/render_template

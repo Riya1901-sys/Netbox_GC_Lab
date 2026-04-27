@@ -1,11 +1,11 @@
 - include_role:
-    name: deploy/PRE_CHECKS
+    name: deploy/pre_checks
 
 - include_role:
-    name: deploy/BACKUP
+    name: deploy/backup
 
 - include_role:
-    name: deploy/PUSH_CONFIG
+    name: deploy/push_config
 
 - include_role:
-    name: deploy/POST_CHECKS
+    name: deploy/post_checks
