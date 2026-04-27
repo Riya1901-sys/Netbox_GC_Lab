@@ -1,8 +1,8 @@
 - include_role:
-  name: iosxe_golden_config_render/NETBOX_FETCH
+  name: netbox_golden_config_render/NETBOX_FETCH
   
 - include_role:
-  name: iosxe_golden_config_render/BUILD_CONTEXT
+  name: netbox_golden_config_render/BUILD_CONTEXT
 
 - include_role:
-  name: iosxe_golden_config_render/RENDER_TEMPLATE
+  name: netbox_golden_config_render/RENDER_TEMPLATE
