@@ -4,7 +4,7 @@
   gather_facts: false
   
   vars_files:
-  - ../vars/golden_config.yml
+  - vars/golden_config.yml
 
   roles:
     - role: render
@@ -18,7 +18,7 @@
     - ansible.netcommon
   
   vars_files:
-  - ../vars/golden_config.yml
+  - vars/golden_config.yml
 
   roles:
     - role: deploy
