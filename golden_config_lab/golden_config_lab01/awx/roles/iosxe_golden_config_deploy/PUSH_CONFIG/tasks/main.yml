@@ -1,0 +1,11 @@
+- name: Push rendered golden configuration to the target switch
+  cisco.ios.ios_config:
+    src: "{{ golden_config_rendered_config_path }}"
+    save_when: never
+    match: none
+  register: golden_config_push_result
+
+- name: Save running configuration after deployment
+  cisco.ios.ios_config:
+    save_when: always
+  when: golden_config_deploy_force_save | bool

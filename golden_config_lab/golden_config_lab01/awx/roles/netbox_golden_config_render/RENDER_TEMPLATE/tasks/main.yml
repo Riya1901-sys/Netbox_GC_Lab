@@ -1,0 +1,91 @@
+- name: Assemble final render payload for the Jinja template
+  ansible.builtin.set_fact:
+    golden_config_render_payload: >-
+      {{
+        {
+          'device': {
+            'name': golden_config_device_record.name,
+            'role': golden_config_device_record.role.slug,
+            'platform': golden_config_device_record.platform.slug,
+            'site': golden_config_device_record.site.name,
+            'location': golden_config_device_record.location.name,
+            'snmp_location': (
+              golden_config_device_record.custom_fields.snmp_location_override
+              | default(
+                  golden_config_device_record.site.name ~ ' - ' ~ golden_config_device_record.location.name,
+                  true
+                )
+            )
+          },
+          'management': {
+            'svi_name': golden_config_management_interface.name,
+            'ip_address': golden_config_management_ip_address,
+            'prefix_length': golden_config_management_prefix_length,
+            'subnet_mask': golden_config_management_subnet_mask,
+            'gateway': golden_config_management_gateway
+          },
+          'oob': {
+            'interface_name': golden_config_oob_interface.name,
+            'ip_address': golden_config_oob_ip_address,
+            'prefix_length': golden_config_oob_prefix_length,
+            'subnet_mask': golden_config_oob_subnet_mask,
+            'gateway': golden_config_oob_gateway
+          },
+          'source_interface': {
+            'name': golden_config_oob_interface.name
+          },
+          'vlans': golden_config_vlans_normalized,
+          'interfaces': {
+            'authenticated_access': golden_config_interfaces_resolved.authenticated_access,
+            'visio_access': golden_config_interfaces_resolved.visio_access,
+            'ap_trunks': golden_config_interfaces_resolved.ap_trunks,
+            'uplink_members': golden_config_interfaces_resolved.uplink_members,
+            'uplink_members_range': (golden_config_uplink_members_range | trim)
+          },
+          'golden_config': {
+            'services': golden_config_context.services,
+            'aaa': golden_config_context.aaa,
+            'standards': golden_config_context.standards,
+            'access_lists': (
+              golden_config_context.access_lists
+              | combine(
+                  { 'vty_acl_11': golden_config_vty_acl_entries },
+                  recursive=True
+                )
+            ),
+            'snmp': golden_config_context.snmp,
+            'secrets': golden_config_effective_secrets,
+            'security': golden_config_resolved_policy.security,
+            'port_profiles': golden_config_resolved_policy.port_profiles
+          }
+        }
+      }}
+
+- name: Ensure AWX artifact directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ golden_config_render_output_dir }}"
+    - "{{ golden_config_render_context_output_dir }}"
+
+- name: Persist render payload for troubleshooting and validation
+  ansible.builtin.copy:
+    dest: "{{ golden_config_render_context_output_dir }}/{{ golden_config_device_record.name }}.json"
+    content: "{{ golden_config_render_payload | to_nice_json }}"
+    mode: "0644"
+  when: golden_config_write_render_context | bool
+
+- name: Render IOS-XE golden configuration from the resolved payload
+  ansible.builtin.template:
+    src: "{{ golden_config_template_path }}"
+    dest: "{{ golden_config_render_output_dir }}/{{ golden_config_device_record.name }}.cfg"
+    mode: "0644"
+  vars:
+    device: "{{ golden_config_render_payload.device }}"
+    management: "{{ golden_config_render_payload.management }}"
+    oob: "{{ golden_config_render_payload.oob }}"
+    source_interface: "{{ golden_config_render_payload.source_interface }}"
+    vlans: "{{ golden_config_render_payload.vlans }}"
+    interfaces: "{{ golden_config_render_payload.interfaces }}"
+    golden_config: "{{ golden_config_render_payload.golden_config }}"

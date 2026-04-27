@@ -1,0 +1,18 @@
+---
+- name: Render IOS-XE access-switch golden configuration
+  hosts: localhost
+  gather_facts: false
+
+  roles:
+    - role: netbox_golden_config_render
+
+- name: Deploy IOS-XE access-switch golden configuration
+  hosts: iosxe_access_switches
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  collections:
+    - cisco.ios
+    - ansible.netcommon
+
+  roles:
+    - role: iosxe_golden_config_deploy

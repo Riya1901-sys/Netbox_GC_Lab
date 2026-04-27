@@ -1,0 +1,12 @@
+- name: Capture running configuration before deployment
+  cisco.ios.ios_command:
+    commands:
+      - show running-config
+  register: golden_config_running_config_before
+
+- name: Persist pre-change running config backup to the controller
+  ansible.builtin.copy:
+    dest: "{{ golden_config_backup_output_dir }}/{{ inventory_hostname }}-before.cfg"
+    content: "{{ golden_config_running_config_before.stdout[0] }}"
+    mode: "0644"
+  delegate_to: localhost

@@ -282,7 +282,7 @@ ip ssh time-out 60
 ip ssh authentication-retries 3
 ip ssh source-interface {{ source_interface.name }}
 !
-ip route 0.0.0.0 0.0.0.0 {{ oob.gateway }}
+ip default-gateway {{ oob.gateway }}
 !
 logging facility daemon
 logging source-interface {{ source_interface.name }}

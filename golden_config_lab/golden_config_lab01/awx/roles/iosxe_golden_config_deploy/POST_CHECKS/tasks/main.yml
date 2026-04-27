@@ -1,0 +1,24 @@
+- name: Run post-deployment validation commands
+  cisco.ios.ios_command:
+    commands: "{{ golden_config_postcheck_commands }}"
+  register: golden_config_postcheck_output
+  when: golden_config_postcheck_commands | length > 0
+
+- name: Persist post-deployment command output to the controller
+  ansible.builtin.copy:
+    dest: "{{ golden_config_backup_output_dir }}/{{ inventory_hostname }}-postcheck.txt"
+    content: |
+      {% for command_output in golden_config_postcheck_output.stdout | default([]) %}
+      {{ command_output }}
+
+      {% endfor %}
+    mode: "0644"
+  delegate_to: localhost
+  when: golden_config_postcheck_commands | length > 0
+
+- name: Save postcheck output locally
+  ansible.builtin.copy:
+    dest: "{{ golden_config_backup_output_dir }}/{{ inventory_hostname }}-postcheck.txt"
+    content: "{{ golden_config_postcheck_output.stdout | join('\n') }}"
+    mode: '0644'
+  delegate_to: localhost

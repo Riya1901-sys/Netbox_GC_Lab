@@ -1,0 +1,108 @@
+- name: Validate required input variables for golden config rendering
+  ansible.builtin.assert:
+    that:
+      - netbox_api_url | length > 0
+      - netbox_api_token | length > 0
+      - golden_config_target_device | length > 0
+      - golden_config_template_path | length > 0
+      - golden_config_render_output_dir | length > 0
+      - golden_config_render_context_output_dir | length > 0
+    fail_msg: >-
+      netbox_api_url, netbox_api_token, golden_config_target_device,
+      golden_config_template_path, golden_config_render_output_dir, and
+      golden_config_render_context_output_dir must be defined before running this job.
+
+- name: Build NetBox API request headers
+  ansible.builtin.set_fact:
+    golden_config_netbox_headers:
+      Authorization: "Token {{ netbox_api_token }}"
+      Accept: "application/json"
+      Content-Type: "application/json"
+  no_log: true
+
+- name: Query NetBox for the target device record
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/dcim/devices/?name={{ golden_config_target_device | urlencode }}"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_device_query
+  no_log: true
+
+- name: Validate target device lookup result
+  ansible.builtin.assert:
+    that:
+      - golden_config_device_query.json.count == 1
+    fail_msg: >-
+      Expected exactly one NetBox device named {{ golden_config_target_device }},
+      but received {{ golden_config_device_query.json.count }} results.
+
+- name: Cache target device record
+  ansible.builtin.set_fact:
+    golden_config_device_record: "{{ golden_config_device_query.json.results[0] }}"
+  no_log: true
+
+- name: Query NetBox for interfaces on the target device
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_device_record.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_interfaces_query
+  no_log: true
+
+- name: Query NetBox for site VLANs
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ golden_config_device_record.site.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_vlans_query
+  no_log: true
+
+- name: Query NetBox for the device primary IPv4 record
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ golden_config_device_record.primary_ip4.id }}/"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_primary_ip_query
+  no_log: true
+
+- name: Query NetBox for all IPv4 addresses on the target device
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ golden_config_device_record.id }}&family=4&limit=100"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_device_ips_query
+  no_log: true
+
+- name: Query NetBox for the tagged in-band management prefix on the device site
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=management-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_management_prefix_query
+  no_log: true
+
+- name: Query NetBox for the tagged OOB prefix on the device site
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=oob-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: golden_config_oob_prefix_query
+  no_log: true
+
+- name: Cache NetBox collections required for render-context assembly
+  ansible.builtin.set_fact:
+    golden_config_interfaces_all: "{{ golden_config_interfaces_query.json.results }}"
+    golden_config_vlans_all: "{{ golden_config_vlans_query.json.results }}"
+    golden_config_primary_ip_record: "{{ golden_config_primary_ip_query.json }}"
+    golden_config_device_ip_records: "{{ golden_config_device_ips_query.json.results }}"
+    golden_config_management_prefix_record: "{{ golden_config_management_prefix_query.json.results[0] }}"
+    golden_config_oob_prefix_record: "{{ golden_config_oob_prefix_query.json.results[0] }}"
+    golden_config_context: "{{ golden_config_device_record.config_context.golden_config }}"
+  no_log: true
