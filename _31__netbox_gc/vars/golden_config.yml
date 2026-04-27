@@ -25,9 +25,10 @@
     netbox_api_token: "{{ lookup('env', 'NETBOX_API_TOKEN') | default('', true) }}"
     golden_config_target_device: ""
 
-    golden_config_template_path: "{{ playbook_dir }}/../../templates/iosxe_access_switch_golden_config.j2"
-    golden_config_render_output_dir: "{{ playbook_dir }}/../artifacts/rendered-configs"
-    golden_config_render_context_output_dir: "{{ playbook_dir }}/../artifacts/render-contexts"
+    golden_config_template_path: "/runner/project/templates/iosxe_access_switch_golden_config.j2"
+    golden_config_render_output_dir: "/runner/project/artifacts/rendered-configs"
+    golden_config_render_context_output_dir: "/runner/project/artifacts/render-contexts"
+    golden_config_backup_output_dir: "/runner/project/artifacts/prechange-backups"
     golden_config_write_render_context: true
     golden_config_require_runtime_secrets: true
 
@@ -84,8 +85,5 @@
         wildcard: 0.0.0.255
     
     #deployment roles variables
-    golden_config_render_output_dir: ""
-    golden_config_render_context_output_dir: ""
-    golden_config_backup_output_dir: ""
     golden_config_deploy_force_save: true
     golden_config_postcheck_commands: []
