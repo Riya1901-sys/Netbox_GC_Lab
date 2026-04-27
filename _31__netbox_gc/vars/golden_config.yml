@@ -25,7 +25,7 @@
     netbox_api_token: "{{ lookup('env', 'NETBOX_API_TOKEN') | default('', true) }}"
     golden_config_target_device: ""
 
-    golden_config_template_path: "/runner/project/templates/iosxe_access_switch_golden_config.j2"
+    golden_config_template_path: "../templates/iosxe_access_switch_golden_config.j2"
     golden_config_render_output_dir: "/runner/project/artifacts/rendered-configs"
     golden_config_render_context_output_dir: "/runner/project/artifacts/render-contexts"
     golden_config_backup_output_dir: "/runner/project/artifacts/prechange-backups"
