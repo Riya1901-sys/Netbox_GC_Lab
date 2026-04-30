@@ -54,7 +54,7 @@
       - golden_config_management_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
     fail_msg: >-
       Expected exactly one management prefix tagged management-subnet for site
-      {{ golden_config_device_record.site.name }} and that prefix must have the
+      {{ device.site.name }} and that prefix must have the
       default_gateway custom field populated.
 
 - name: Validate OOB prefix lookup result
@@ -65,7 +65,7 @@
       - golden_config_oob_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
     fail_msg: >-
       Expected exactly one OOB prefix tagged oob-subnet for site
-      {{ golden_config_device_record.site.name }} and that prefix must have the
+      {{ device.site.name }} and that prefix must have the
       default_gateway custom field populated.
 
 - name: Build VLAN role lookup from native NetBox VLAN objects
