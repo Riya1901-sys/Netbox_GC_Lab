@@ -27,7 +27,7 @@
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
   register: golden_config_device_query
-  no_log: true
+  no_log: false
 
 - name: Validate target device lookup result
   ansible.builtin.assert:
