@@ -26,83 +26,32 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
+  loop: "{{ golden_config_target_device }}"
   register: golden_config_device_query
   no_log: false
 
 - name: Validate target device lookup result
   ansible.builtin.assert:
     that:
-      - golden_config_device_query.json.count == 1
-    fail_msg: >-
-      Expected exactly one NetBox device named {{ golden_config_target_device }},
-      but received {{ golden_config_device_query.json.count }} results.
+      - item.json.count == 1
+    fail_msg: "Device lookup failed for {{ item.item }}"
+  loop: "{{ golden_config_device_query.results }}"
 
-- name: Cache target device record
+- name: Build device records list
   ansible.builtin.set_fact:
-    golden_config_device_record: "{{ golden_config_device_query.json.results[0] }}"
-  no_log: true
+    golden_config_devices: >-
+      {{
+        golden_config_device_query.results
+        | selectattr('json.results', 'defined')
+        | map(attribute='json.results')
+        | select('length')
+        | map('first')
+        | list
+      }}
 
-- name: Query NetBox for interfaces on the target device
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_device_record.id }}&limit=200"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_interfaces_query
-  no_log: true
-
-- name: Query NetBox for site VLANs
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ golden_config_device_record.site.id }}&limit=200"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_vlans_query
-  no_log: true
-
-- name: Query NetBox for the device primary IPv4 record
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ golden_config_device_record.primary_ip4.id }}/"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_primary_ip_query
-  no_log: true
-
-- name: Query NetBox for all IPv4 addresses on the target device
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ golden_config_device_record.id }}&family=4&limit=100"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_device_ips_query
-  no_log: true
-
-- name: Query NetBox for the tagged in-band management prefix on the device site
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=management-subnet&limit=50"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_management_prefix_query
-  no_log: true
-
-- name: Query NetBox for the tagged OOB prefix on the device site
-  ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=oob-subnet&limit=50"
-    method: GET
-    headers: "{{ golden_config_netbox_headers }}"
-    return_content: true
-  register: golden_config_oob_prefix_query
-  no_log: true
-
-- name: Cache NetBox collections required for render-context assembly
-  ansible.builtin.set_fact:
-    golden_config_interfaces_all: "{{ golden_config_interfaces_query.json.results }}"
-    golden_config_vlans_all: "{{ golden_config_vlans_query.json.results }}"
-    golden_config_primary_ip_record: "{{ golden_config_primary_ip_query.json }}"
-    golden_config_device_ip_records: "{{ golden_config_device_ips_query.json.results }}"
-    golden_config_management_prefix_record: "{{ golden_config_management_prefix_query.json.results[0] }}"
-    golden_config_oob_prefix_record: "{{ golden_config_oob_prefix_query.json.results[0] }}"
-    golden_config_context: "{{ golden_config_device_record.config_context.golden_config }}"
-  no_log: true
+- name: Process each device
+  ansible.builtin.include_tasks: per_device.yml
+  loop: "{{ golden_config_devices }}"
+  loop_control:
+    loop_var: device
+  

@@ -1,0 +1,67 @@
+- name: Query interfaces
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ device.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: interfaces_query
+  no_log: true
+
+- name: Query VLANs
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ device.site.id }}&limit=200"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: vlans_query
+  no_log: true
+
+- name: Query primary IP
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ device.primary_ip4.id }}/"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: primary_ip_query
+  when: device.primary_ip4 is defined
+  no_log: true
+
+- name: Query device IPs
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ device.id }}&family=4&limit=100"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: device_ips_query
+  no_log: true
+
+- name: Query management prefix
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ device.site.id }}&tag=management-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: mgmt_prefix_query
+  no_log: true
+
+- name: Query OOB prefix
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ device.site.id }}&tag=oob-subnet&limit=50"
+    method: GET
+    headers: "{{ golden_config_netbox_headers }}"
+    return_content: true
+  register: oob_prefix_query
+  no_log: true
+
+- name: Build render context
+  ansible.builtin.set_fact:
+    render_context:
+      device: "{{ device }}"
+      interfaces: "{{ interfaces_query.json.results }}"
+      vlans: "{{ vlans_query.json.results }}"
+      primary_ip: "{{ primary_ip_query.json | default({}) }}"
+      device_ips: "{{ device_ips_query.json.results }}"
+      mgmt_prefix: "{{ mgmt_prefix_query.json.results | first | default({}) }}"
+      oob_prefix: "{{ oob_prefix_query.json.results | first | default({}) }}"
+      config_context: "{{ device.config_context.golden_config | default({}) }}"
+  no_log: true
