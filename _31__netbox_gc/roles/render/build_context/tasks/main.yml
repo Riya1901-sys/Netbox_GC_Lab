@@ -26,7 +26,7 @@
 - name: Merge NetBox context secrets with runtime secret overrides
   ansible.builtin.set_fact:
     golden_config_effective_secrets: "{{ golden_config_context.secrets | combine(golden_config_runtime_secrets, recursive=True) }}"
-  no_log: true
+  no_log: false
 
 - name: Validate that deployment secrets are resolved
   ansible.builtin.assert:
