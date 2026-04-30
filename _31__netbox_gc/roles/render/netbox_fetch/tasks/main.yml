@@ -42,14 +42,14 @@
   debug:
     var: golden_config_device_query 
 
-- name: Build device records list
+- name: Build device records list (robust)
   ansible.builtin.set_fact:
     golden_config_devices: >-
       {{
         golden_config_device_query.results
         | map(attribute='json.results')
-        | select('defined')
-        | select('length')
+        | reject('equalto', None)
+        | reject('equalto', [])
         | map('first')
         | list
       }}
