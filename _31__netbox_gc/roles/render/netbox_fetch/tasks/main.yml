@@ -33,9 +33,13 @@
 - name: Validate target device lookup result
   ansible.builtin.assert:
     that:
-      - item.json.count == 1
+      - item.json.count | default(0) == 1
     fail_msg: "Device lookup failed for {{ item.item }}"
   loop: "{{ golden_config_device_query.results }}"
+
+- name: Debug device query output
+  debug:
+    var: golden_config_device_query 
 
 - name: Build device records list
   ansible.builtin.set_fact:
@@ -43,6 +47,7 @@
       {{
         golden_config_device_query.results
         | selectattr('json.results', 'defined')
+        | selectattr('json.results', 'truthy')
         | map(attribute='json.results')
         | select('length')
         | map('first')
