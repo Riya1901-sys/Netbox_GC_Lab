@@ -22,7 +22,7 @@
 
 - name: Query NetBox for the target device record
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/dcim/devices/?name={{ golden_config_target_device | urlencode }}"
+    url: "{{ netbox_api_url }}/api/dcim/devices/?name={{ item | urlencode }}"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true

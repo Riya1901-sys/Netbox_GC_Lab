@@ -11,24 +11,28 @@
     ansible_network_cli_ssh_type: paramiko
     ansible_host_key_auto_add: true
  
-    golden_config_render_output_dir: "{{ playbook_dir }}/../artifacts/rendered-configs"
-    golden_config_render_context_output_dir: "{{ playbook_dir }}/../artifacts/render-contexts"
     golden_config_backup_output_dir: "{{ playbook_dir }}/../artifacts/prechange-backups"
  
     golden_config_postcheck_commands:
       - show ip interface brief
       - show running-config | include ^hostname
+      - show running-config
+      - show version
+      - show vlan brief
+
 
     #Rendering roles variable
     
-    netbox_api_url: "{{ lookup('env', 'NETBOX_API_URL') | default('', true) }}"
-    netbox_api_token: "{{ lookup('env', 'NETBOX_API_TOKEN') | default('', true) }}"
-    golden_config_target_device: ""
+    netbox_api_url: "{{ lookup('env', 'NETBOX_API_URL') }}"
+    netbox_api_token: "{{ lookup('env', 'NETBOX_API_TOKEN') }}"
+    golden_config_target_device: []
 
     golden_config_template_path: "../templates/iosxe_access_switch_golden_config.j2"
+
     golden_config_render_output_dir: "/runner/project/artifacts/rendered-configs"
     golden_config_render_context_output_dir: "/runner/project/artifacts/render-contexts"
     golden_config_backup_output_dir: "/runner/project/artifacts/prechange-backups"
+
     golden_config_write_render_context: true
     golden_config_require_runtime_secrets: true
 
@@ -86,8 +90,5 @@
     
     #deployment roles variables
     golden_config_deploy_force_save: true
-    golden_config_postcheck_commands:
-      - "show running-config"
-      - "show version"
-      - "show vlan brief"
+    
     
