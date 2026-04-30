@@ -1,6 +1,6 @@
 - name: Query interfaces
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ device.id }}&limit=200"
+    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_golden_config_device_record_record.id }}&limit=200"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
@@ -9,7 +9,7 @@
 
 - name: Query VLANs
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ device.site.id }}&limit=200"
+    url: "{{ netbox_api_url }}/api/ipam/vlans/?site_id={{ golden_config_device_record.site.id }}&limit=200"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
@@ -18,17 +18,17 @@
 
 - name: Query primary IP
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ device.primary_ip4.id }}/"
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/{{ golden_config_device_record.primary_ip4.id }}/"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
   register: primary_ip4_query
-  when: device.primary_ip4 is defined
+  when: golden_config_device_record.primary_ip4 is defined
   no_log: true
 
-- name: Query device IPs
+- name: Query golden_config_device_record IPs
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ device.id }}&family=4&limit=100"
+    url: "{{ netbox_api_url }}/api/ipam/ip-addresses/?device_id={{ golden_config_device_record.id }}&family=4&limit=100"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
@@ -37,7 +37,7 @@
 
 - name: Query management prefix
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ device.site.id }}&tag=management-subnet&limit=50"
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=management-subnet&limit=50"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
@@ -46,7 +46,7 @@
 
 - name: Query OOB prefix
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ device.site.id }}&tag=oob-subnet&limit=50"
+    url: "{{ netbox_api_url }}/api/ipam/prefixes/?site_id={{ golden_config_device_record.site.id }}&tag=oob-subnet&limit=50"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
@@ -56,16 +56,16 @@
 - name: Build render context
   ansible.builtin.set_fact:
     render_context:
-      device: "{{ device }}"
+      golden_config_device_record: "{{ golden_config_device_record }}"
       interfaces: "{{ interfaces_query.json.results | default([]) }}"
       vlans: "{{ vlans_query.json.results | default([]) }}"
       primary_ip: >-
         {{
           primary_ip4_query.json
-          if (device.primary_ip4 is defined)
+          if (golden_config_device_record.primary_ip4 is defined)
           else {}
         }}
-      device_ips: "{{ device_ips_query.json.results | default([]) }}"
+      golden_config_device_record_ips: "{{ golden_config_device_record_ips_query.json.results | default([]) }}"
       mgmt_prefix: >-
         {{
           (mgmt_prefix_query.json.results | default([]) | first)
@@ -76,6 +76,6 @@
           (oob_prefix_query.json.results | default([]) | first)
           | default({})
         }}
-      golden_config_context: "{{ device.config_context.golden_config | default({}) }}"
+      golden_config_context: "{{ golden_config_device_record.config_context.golden_config | default({}) }}"
   no_log: true
 
