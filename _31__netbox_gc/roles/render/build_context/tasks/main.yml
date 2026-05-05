@@ -187,7 +187,7 @@
           | first
         )
       }}
-  no_log: true
+  no_log: false
 
 - name: Identify the OOB management IPv4 record
   ansible.builtin.set_fact:
