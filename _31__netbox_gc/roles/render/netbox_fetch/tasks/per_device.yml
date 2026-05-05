@@ -5,7 +5,7 @@
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
   register: interfaces_query
-  no_log: true
+  no_log: false
 
 - name: Query VLANs
   ansible.builtin.uri:
