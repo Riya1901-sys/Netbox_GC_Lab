@@ -4,15 +4,15 @@
       {{
         {
           'device': {
-            'name': golden_config_device_record.name,
-            'role': golden_config_device_record.role.slug,
-            'platform': golden_config_device_record.platform.slug,
-            'site': golden_config_device_record.site.name,
-            'location': golden_config_device_record.location.name,
+            'name': device.name,
+            'role': device.role.slug,
+            'platform': device.platform.slug,
+            'site': device.site.name,
+            'location': device.location.name,
             'snmp_location': (
-              golden_config_device_record.custom_fields.snmp_location_override
+              device.custom_fields.snmp_location_override
               | default(
-                  golden_config_device_record.site.name ~ ' - ' ~ golden_config_device_record.location.name,
+                  device.site.name ~ ' - ' ~ device.location.name,
                   true
                 )
             )
@@ -71,7 +71,7 @@
 
 - name: Persist render payload for troubleshooting and validation
   ansible.builtin.copy:
-    dest: "{{ golden_config_render_context_output_dir }}/{{ golden_config_device_record.name }}.json"
+    dest: "{{ golden_config_render_context_output_dir }}/{{ device.name }}.json"
     content: "{{ golden_config_render_payload | to_nice_json }}"
     mode: "0644"
   when: golden_config_write_render_context | bool
@@ -79,7 +79,7 @@
 - name: Render IOS-XE golden configuration from the resolved payload
   ansible.builtin.template:
     src: "{{ golden_config_template_path }}"
-    dest: "{{ golden_config_render_output_dir }}/{{ golden_config_device_record.name }}.cfg"
+    dest: "{{ golden_config_render_output_dir }}/{{ device.name }}.cfg"
     mode: "0644"
   vars:
     device: "{{ golden_config_render_payload.device }}"
