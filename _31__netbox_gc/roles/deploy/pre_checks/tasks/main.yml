@@ -12,11 +12,13 @@
 
 - name: Build rendered config path for the target device
   ansible.builtin.set_fact:
-    golden_config_rendered_config_path: "{{ golden_config_render_output_dir }}/{{ golden_config_target_device }}.cfg"
+    golden_config_rendered_config_path: >
+      {{ golden_config_render_output_dir }}/{{ inventory_hostname }}.cfg
 
 - name: Build render context path for the target device
   ansible.builtin.set_fact:
-    golden_config_render_context_path: "{{ golden_config_render_context_output_dir }}/{{ golden_config_target_device }}.json"
+    golden_config_render_context_path: >
+      {{ golden_config_render_context_output_dir }}/{{ inventory_hostname }}.json
 
 - name: Check rendered config exists on the controller
   ansible.builtin.stat:
