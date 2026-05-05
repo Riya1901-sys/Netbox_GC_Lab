@@ -1,8 +1,18 @@
-- include_role:
-    name: render/netbox_fetch
-  
-- include_role:
-    name: render/build_context
+- name: Process each device end-to-end
+  block:
 
-- include_role:
-    name: render/render_template
+    - name: Fetch NetBox data
+      include_role:
+        name: render/netbox_fetch
+
+    - name: Build context
+      include_role:
+        name: render/build_context
+
+    - name: Render template
+      include_role:
+        name: render/render_template
+
+  loop: "{{ golden_config_devices }}"
+  loop_control:
+    loop_var: device
