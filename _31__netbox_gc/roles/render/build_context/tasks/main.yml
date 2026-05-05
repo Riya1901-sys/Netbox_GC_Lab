@@ -54,8 +54,9 @@
       - golden_config_management_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
     fail_msg: >-
       Expected exactly one management prefix tagged management-subnet for site
-      {{ golden_config_device_record.site.name }} and that prefix must have the
+      {{ item.site.name }} and that prefix must have the
       default_gateway custom field populated.
+  loop: "{{ golden_config_devices }}"
 
 - name: Validate OOB prefix lookup result
   ansible.builtin.assert:
@@ -65,8 +66,9 @@
       - golden_config_oob_prefix_query.json.results[0].custom_fields.default_gateway | default('') | length > 0
     fail_msg: >-
       Expected exactly one OOB prefix tagged oob-subnet for site
-      {{ golden_config_device_record.site.name }} and that prefix must have the
+      {{ item.site.name }} and that prefix must have the
       default_gateway custom field populated.
+  loop: "{{ golden_config_devices }}"
 
 - name: Build VLAN role lookup from native NetBox VLAN objects
   ansible.builtin.set_fact:
@@ -220,9 +222,10 @@
     golden_config_management_subnet_mask: "{{ golden_config_prefix_to_netmask_map[(golden_config_management_prefix_record.prefix.split('/')[1]) | int] }}"
     golden_config_management_gateway: >-
       {{
-        golden_config_device_record.custom_fields.management_gateway_override
+        item.custom_fields.management_gateway_override
         | default(golden_config_management_prefix_record.custom_fields.default_gateway, true)
       }}
+  loop: "{{ golden_config_devices }}"
 
 - name: Derive OOB management addressing details
   ansible.builtin.set_fact:
