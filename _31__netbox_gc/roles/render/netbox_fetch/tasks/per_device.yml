@@ -67,6 +67,10 @@
         (oob_prefix_query.json.results | first) | default({})
       }}
 
+- name: Set golden config context from NetBox
+  set_fact:
+    golden_config_context: "{{ device.config_context.golden_config | default({}) }}"
+    
 - name: Map query variables for build_context compatibility
   set_fact:
     golden_config_management_prefix_query: "{{ mgmt_prefix_query }}"
