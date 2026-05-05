@@ -4,7 +4,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: golden_config_interfaces_all
+  register: interfaces_query
   no_log: true
 
 - name: Query VLANs
@@ -13,7 +13,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: golden_config_vlans_all
+  register: vlans_query
   no_log: true
 
 - name: Query primary IP
@@ -32,7 +32,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: golden_config_device_ip_records
+  register: device_ips_query
   no_log: true
 
 - name: Query management prefix
@@ -41,7 +41,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: golden_config_management_prefix_query
+  register:  mgmt_prefix_query
   no_log: true
 
 - name: Query OOB prefix
@@ -50,32 +50,19 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: golden_config_oob_prefix_query
+  register: oob_prefix_query
   no_log: true
 
-- name: Build render context
-  ansible.builtin.set_fact:
-    render_context:
-      device: "{{ device }}"
-      interfaces: "{{ interfaces_query.json.results | default([]) }}"
-      vlans: "{{ vlans_query.json.results | default([]) }}"
-      primary_ip: >-
-        {{
-          primary_ip4_query.json
-          if (device.primary_ip4 is defined)
-          else {}
-        }}
-      device_ips: "{{ device_ips_query.json.results | default([]) }}"
-      mgmt_prefix: >-
-        {{
-          (mgmt_prefix_query.json.results | default([]) | first)
-          | default({})
-        }}
-      oob_prefix: >-
-        {{
-          (oob_prefix_query.json.results | default([]) | first)
-          | default({})
-        }}
-      golden_config_context: "{{ device.config_context.golden_config | default({}) }}"
-  no_log: true
-
+- name: Normalize NetBox data
+  set_fact:
+    golden_config_interfaces_all: "{{ interfaces_query.json.results | default([]) }}"
+    golden_config_vlans_all: "{{ vlans_query.json.results | default([]) }}"
+    golden_config_device_ip_records: "{{ device_ips_query.json.results | default([]) }}"
+    golden_config_management_prefix_record: >-
+      {{
+        (mgmt_prefix_query.json.results | first) | default({})
+      }}
+    golden_config_oob_prefix_record: >-
+      {{
+        (oob_prefix_query.json.results | first) | default({})
+      }}
