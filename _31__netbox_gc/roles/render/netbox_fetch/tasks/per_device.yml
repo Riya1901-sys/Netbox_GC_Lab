@@ -41,7 +41,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: mgmt_prefix_query
+  register: golden_config_management_prefix_query
   no_log: true
 
 - name: Query OOB prefix
@@ -50,7 +50,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: oob_prefix_query
+  register: golden_config_oob_prefix_query
   no_log: true
 
 - name: Build render context
