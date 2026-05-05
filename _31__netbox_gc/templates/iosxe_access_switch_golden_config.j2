@@ -326,7 +326,7 @@ snmp-server host {{ host }} version 3 priv ttsnmpro
 {% endfor %}
 
 snmp-server trap-source {{ source_interface.name }}
-snmp-server location {{ device.snmp_location }}
+snmp-server location {{ golden_config_context.snmp_location | default('DEFAULT_LOCATION') }}
 snmp-server enable traps snmp authentication linkdown linkup coldstart warmstart
 snmp-server enable traps auth-framework sec-violation
 snmp-server enable traps memory bufferpeak
