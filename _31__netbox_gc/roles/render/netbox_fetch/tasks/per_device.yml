@@ -1,6 +1,6 @@
 - name: Query interfaces
   ansible.builtin.uri:
-    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_golden_config_device_record_record.id }}&limit=200"
+    url: "{{ netbox_api_url }}/api/dcim/interfaces/?device_id={{ golden_config_device_record.id }}&limit=200"
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
