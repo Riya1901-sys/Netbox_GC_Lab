@@ -4,7 +4,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: interfaces_query
+  register: golden_config_interfaces_all
   no_log: true
 
 - name: Query VLANs
@@ -13,7 +13,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: vlans_query
+  register: golden_config_vlans_all
   no_log: true
 
 - name: Query primary IP
@@ -32,7 +32,7 @@
     method: GET
     headers: "{{ golden_config_netbox_headers }}"
     return_content: true
-  register: device_ips_query
+  register: golden_config_device_ip_records
   no_log: true
 
 - name: Query management prefix
