@@ -11,15 +11,13 @@
       golden_config_backup_output_dir must be defined before deployment.
 
 - name: Build rendered config path for the target device
-  ansible.builtin.set_fact:
-    golden_config_rendered_config_path: >
-      {{ golden_config_render_output_dir }}/{{ inventory_hostname | lower }}.cfg
+  set_fact:
+    golden_config_rendered_config_path: "{{ golden_config_render_output_dir }}/{{ inventory_hostname }}.cfg"
 
 - name: Build render context path for the target device
-  ansible.builtin.set_fact:
-    golden_config_render_context_path: >
-      {{ golden_config_render_context_output_dir }}/{{ inventory_hostname | lower }}.json
-
+  set_fact:
+    golden_config_render_context_path: "{{ golden_config_render_context_output_dir }}/{{ inventory_hostname }}.json"
+    
 - name: Check rendered config exists on the controller
   ansible.builtin.stat:
     path: "{{ golden_config_rendered_config_path }}"
@@ -39,6 +37,11 @@
 - name: List context files
   command: ls -l {{ golden_config_render_context_output_dir }}
   delegate_to: localhost
+
+- debug:
+    msg:
+      - "Looking for CFG: {{ golden_config_rendered_config_path }}"
+      - "Looking for JSON: {{ golden_config_render_context_path }}"
 
 - name: Validate rendered config presence
   ansible.builtin.assert:
