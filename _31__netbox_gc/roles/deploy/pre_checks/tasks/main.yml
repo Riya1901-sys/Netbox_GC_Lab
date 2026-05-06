@@ -36,6 +36,10 @@
   command: ls -l {{ golden_config_render_output_dir }}
   delegate_to: localhost
 
+- name: List context files
+  command: ls -l {{ golden_config_render_context_output_dir }}
+  delegate_to: localhost
+
 - name: Validate rendered config presence
   ansible.builtin.assert:
     that:

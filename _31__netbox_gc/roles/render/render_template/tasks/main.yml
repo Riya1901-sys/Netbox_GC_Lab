@@ -89,3 +89,9 @@
     vlans: "{{ golden_config_render_payload.vlans }}"
     interfaces: "{{ golden_config_render_payload.interfaces }}"
     golden_config: "{{ golden_config_render_payload.golden_config }}"
+
+- name: Save render context JSON
+  ansible.builtin.copy:
+    content: "{{ golden_config_render_payload | to_nice_json }}"
+    dest: "{{ golden_config_render_context_output_dir }}/{{ device.name }}.json"
+    mode: "0644"    
