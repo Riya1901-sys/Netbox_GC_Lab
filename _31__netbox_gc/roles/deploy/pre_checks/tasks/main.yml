@@ -32,6 +32,10 @@
   delegate_to: localhost
   register: golden_config_render_context_stat
 
+- name: List rendered configs (debug)
+  command: ls -l {{ golden_config_render_output_dir }}
+  delegate_to: localhost
+
 - name: Validate rendered config presence
   ansible.builtin.assert:
     that:
