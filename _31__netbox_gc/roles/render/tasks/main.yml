@@ -1,8 +1,2 @@
 - include_role:
     name: render/netbox_fetch
-  
-- name: Process each device
-  ansible.builtin.include_tasks: render/netbox_fetch/per_device.yml
-  loop: "{{ golden_config_devices }}"
-  loop_control:
-    loop_var: device
