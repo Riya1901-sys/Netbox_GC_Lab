@@ -156,13 +156,16 @@
   ansible.builtin.set_fact:
     golden_config_management_interface: >-
       {{
-        (
+        ( 
           golden_config_interfaces_all
           | selectattr('custom_fields.golden_port_profile', 'equalto', 'management_svi')
           | list
           | first
         )
       }}
+
+- debug:
+    var: golden_config_management_interface
 
 - name: Identify the OOB management interface
   ansible.builtin.set_fact:

@@ -74,4 +74,14 @@
 - name: Map query variables for build_context compatibility
   set_fact:
     golden_config_management_prefix_query: "{{ mgmt_prefix_query }}"
-    golden_config_oob_prefix_query: "{{ oob_prefix_query }}"      
+    golden_config_oob_prefix_query: "{{ oob_prefix_query }}"   
+
+- include_role:
+    name: render/build_context
+  vars:
+    device: "{{ device }}"
+
+- include_role:
+    name: render/render_template
+  vars:
+    device: "{{ device }}"       

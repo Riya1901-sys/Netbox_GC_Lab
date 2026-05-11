@@ -53,10 +53,4 @@
         | map('first')
         | list
       }}
-
-- name: Process each device
-  ansible.builtin.include_tasks: per_device.yml
-  loop: "{{ golden_config_devices }}"
-  loop_control:
-    loop_var: device
   
