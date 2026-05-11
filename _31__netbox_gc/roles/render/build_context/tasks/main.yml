@@ -30,7 +30,7 @@
         (device.config_context.golden_config.secrets | default({}))
         | combine(golden_config_runtime_secrets | default({}), recursive=True)
       }}
-  no_log: true
+  no_log: false
 
 - name: Validate that deployment secrets are resolved
   ansible.builtin.assert:
