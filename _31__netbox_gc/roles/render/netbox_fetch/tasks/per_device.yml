@@ -78,10 +78,6 @@
 
 - include_role:
     name: render/build_context
-  vars:
-    device: "{{ device }}"
 
 - include_role:
-    name: render/render_template
-  vars:
-    device: "{{ device }}"       
+    name: render/render_template       
