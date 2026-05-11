@@ -6,7 +6,3 @@
 
 - include_role:
     name: render/render_template
-
-  loop: "{{ golden_config_devices}}"  
-  loop_control:
-    loop_var: device
