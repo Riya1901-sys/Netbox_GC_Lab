@@ -1,5 +1,11 @@
-- name: Deploy config per device
-  include_tasks: device_pipeline.yml
-  loop: "{{ golden_config_target_device }}"
-  loop_control:
-    loop_var: device
+- include_role:
+    name: deploy/pre_checks
+
+- include_role:
+    name: deploy/backup
+
+- include_role:
+    name: deploy/push_config
+
+- include_role:
+    name: deploy/post_checks
