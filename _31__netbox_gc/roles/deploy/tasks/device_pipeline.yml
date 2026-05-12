@@ -1,0 +1,11 @@
+- include_role:
+    name: deploy/pre_checks
+
+- include_role:
+    name: deploy/backup
+
+- include_role:
+    name: deploy/push_config
+
+- include_role:
+    name: deploy/post_checks
