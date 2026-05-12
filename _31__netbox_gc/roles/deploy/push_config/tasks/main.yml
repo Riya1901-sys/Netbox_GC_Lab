@@ -1,3 +1,10 @@
+- name: Debug deployment target
+  debug:
+    msg:
+      - "Inventory Host: {{ inventory_hostname }}"
+      - "Ansible Host: {{ ansible_host }}"
+      - "Config File: {{ golden_config_rendered_config_path }}"
+      
 - name: Push rendered golden configuration to the target switch
   cisco.ios.ios_config:
     src: "{{ golden_config_rendered_config_path }}"
